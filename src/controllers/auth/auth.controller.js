@@ -84,21 +84,22 @@ class AuthController {
     const { id } = req.params;
     const { userId } = req.user;
 
-    const requestinguser = await AuthModel.findById(userId);
+    const requestingUser = await AuthModel.findById(userId);
 
-    if (!requestinguser || requestinguser?.role !== RoleConstands.ADMIN) {
+    if (
+      !requestingUser ||
+      (requestingUser && requestingUser?.role !== RoleConstands.ADMIN)
+    ) {
       throw new HttpException(
         StatusCodes.FORBIDDEN,
         "You do not have permission to access this resource.",
       );
     }
 
-    const ExUser = await AuthModel.findById(id)
-      .select("-password")
-      .populate({
-        path: "dictionary",
-        limit: 5,
-      });
+    const ExUser = await AuthModel.findById(id).select("-password").populate({
+      path: "dictionary",
+      limit: 5,
+    });
 
     if (!ExUser) {
       throw new HttpException(StatusCodes.NOT_FOUND, "User not found");
@@ -107,6 +108,56 @@ class AuthController {
     res.status(StatusCodes.OK).json({
       success: true,
       data: ExUser,
+    });
+  });
+
+  static getAllUser = asyncHandler(async (req, res) => {
+    const { search, page, limit, role } = req.query;
+    const { userId } = req.user;
+
+    const requestingUser = await AuthModel.findById(userId);
+
+    if (
+      !requestingUser ||
+      (requestingUser && requestingUser.role !== RoleConstands.ADMIN)
+    ) {
+      throw new HttpException(
+        StatusCodes.FORBIDDEN,
+        "You are not authorized to access this resource",
+      );
+    }
+
+    const query = {};
+
+    if (search && search.trim()) {
+      query.$or = [
+        { name: { $regex: search.trim(), $options: "i" } },
+        { telephone: { $regex: search.trim(), $options: "i" } },
+      ];
+    }
+
+    if (role) {
+      query.role = role;
+    }
+
+    const exUsers = await AuthModel.find(query)
+      .select("-password")
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    const totalCount = await AuthModel.countDocuments(query);
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: exUsers,
+      pagination: {
+        totalCount,
+        page: Number(page),
+        limit: Number(limit),
+        totalPage: Math.ceil(totalCount / limit),
+        hasPrev: page > 1,
+        hasNext: page * limit < totalCount,
+      },
     });
   });
 }

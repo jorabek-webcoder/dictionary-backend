@@ -1,6 +1,6 @@
 class RoleConstands {
-  static ADMIN = "ADMIN";
-  static USER = "USER";
+  static ADMIN = "admin";
+  static USER = "user";
 }
 
 class CollectionName {

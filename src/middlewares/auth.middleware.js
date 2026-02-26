@@ -1,7 +1,6 @@
 const { StatusCodes } = require("http-status-codes");
 const { HttpException } = require("../utils/http-exception");
 const { verify } = require("jsonwebtoken");
-const { token } = require("morgan");
 const { JWT_SECRET_KEY } = require("../utils/secret");
 
 const AuthMiddleware = (req, res, next) => {
@@ -18,7 +17,7 @@ const AuthMiddleware = (req, res, next) => {
   }
 
   try {
-    const decoded = verify(token, JWT_SECRET_KEY);
+    const decoded = verify(AuthToken, JWT_SECRET_KEY);
     req.user = { userId: decoded.userId };
     next();
   } catch (err) {

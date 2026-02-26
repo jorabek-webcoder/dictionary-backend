@@ -1,12 +1,11 @@
 const { StatusCodes } = require("http-status-codes");
 const { asyncHandler } = require("../../utils/async-handler");
 const { HttpException } = require("../../utils/http-exception");
-const { REG_KEY, JWT_SECRET_KEY } = require("../../utils/secret");
 const { AuthModel } = require("../../models/auth/auth.model");
 const { genSalt, hash, compare } = require("bcryptjs");
 const { RoleConstands } = require("../../utils/constands");
 const { sign } = require("jsonwebtoken");
-const { param } = require("express-validator");
+const { JWT_SECRET_KEY, REG_KEY } = require("../../utils/secret");
 
 class AuthController {
   static signUpAdmin = asyncHandler(async (req, res) => {
@@ -55,7 +54,7 @@ class AuthController {
       );
     }
 
-    const isMatch = compare(password, ExAdmin.password);
+    const isMatch = await compare(password, ExAdmin.password);
 
     if (!isMatch) {
       throw new HttpException(
@@ -64,8 +63,8 @@ class AuthController {
       );
     }
 
-    const createToken = sign({ userId: ExAdmin._id }, JWT_SECRET_KEY, {
-      expiresIn: "7d",
+    const createToken = await sign({ userId: ExAdmin._id }, JWT_SECRET_KEY, {
+      expiresIn: "24h",
     });
 
     res.status(StatusCodes.OK).json({
@@ -111,8 +110,8 @@ class AuthController {
     });
   });
 
-  static getAllUser = asyncHandler(async (req, res) => {
-    const { search, page, limit, role } = req.query;
+  static getAllUsers = asyncHandler(async (req, res) => {
+    const { search, page = 1, limit = 10, role } = req.query;
     const { userId } = req.user;
 
     const requestingUser = await AuthModel.findById(userId);
@@ -141,7 +140,7 @@ class AuthController {
     }
 
     const exUsers = await AuthModel.find(query)
-      .select("-password")
+      .select("-password -dictionary")
       .skip((page - 1) * limit)
       .limit(limit);
 
@@ -158,6 +157,76 @@ class AuthController {
         hasPrev: page > 1,
         hasNext: page * limit < totalCount,
       },
+    });
+  });
+
+  static updateMePhone = asyncHandler(async (req, res) => {
+    const { newPhone, password } = req.body;
+    const { userId } = req.user;
+
+    const exUser = await AuthModel.findOne({ telephone: newPhone });
+
+    if (exUser) {
+      throw new HttpException(
+        StatusCodes.CONFLICT,
+        "An account with this telephone number already exists.",
+      );
+    }
+
+    const requestingUser = await AuthModel.findById(userId);
+
+    const isMatch = await compare(password, requestingUser.password);
+
+    if (!isMatch) {
+      throw new HttpException(StatusCodes.UNAUTHORIZED, "Invalid password");
+    }
+
+    await AuthModel.findByIdAndUpdate(userId, { telephone: newPhone });
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Phone number updated successfully",
+    });
+  });
+
+  static updateMePassword = asyncHandler(async (req, res) => {
+    const { newPassword, currentPassword } = req.body;
+    const { userId } = req.user;
+
+    if (newPassword === currentPassword) {
+      throw new HttpException(
+        StatusCodes.BAD_REQUEST,
+        "New password must be different from the current password.",
+      );
+    }
+
+    const requestingUser = await AuthModel.findById(userId);
+
+    const isMatch = await compare(currentPassword, requestingUser.password);
+
+    if (!isMatch) {
+      throw new HttpException(StatusCodes.UNAUTHORIZED, "Invalid password");
+    }
+
+    const salt = await genSalt(10);
+    const hashedPassword = await hash(newPassword, salt);
+
+    await AuthModel.findByIdAndUpdate(userId, { password: hashedPassword });
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "password update successfully",
+    });
+  });
+
+  static deleteMe = asyncHandler(async (req, res) => {
+    const { userId } = req.user;
+
+    await AuthModel.findByIdAndDelete(userId);
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "account deleted successfully",
     });
   });
 }
